@@ -1,81 +1,50 @@
-const express = require('express');
-const axios = require('axios');
-const cors = require('cors');
-const { Parser } = require('json2csv');
-const fs = require('fs');
-const path = require('path');
+const express = require("express");
+const { MongoClient } = require("mongodb");
+const cors = require("cors");
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const port = process.env.PORT || 10000;
 
-// Replace with your actual API info
-const API_URL = 'https://api.data.gov.in/resource/eaa8daa8-ddaf-4a2e-9db4-df39b6ae5c1d';
-const API_KEY = '579b464db66ec23bdd000001cdd3946e44ce4aad7209ff7b23ac571b';
-
+// Middleware
 app.use(cors());
 
-// Route to serve JSON data at '/'
-app.get('/', async (req, res) => {
-  try {
-    const response = await axios.get(API_URL, {
-      params: {
-        'api-key': API_KEY,
-        format: 'json',
-      },
-      headers: {
-        accept: 'application/json',
-      },
-    });
+// MongoDB connection string
+const uri = "mongodb+srv://avnichauhan3622_db_user:tashu@2004@cluster0.pi1m1ve.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
+const client = new MongoClient(uri);
 
-    res.json(response.data);
-  } catch (error) {
-    console.error('Error fetching data:', error.message);
-    res.status(500).send('Failed to fetch data');
+let casesCollection;
+
+// Connect to MongoDB
+async function connectDB() {
+  try {
+    await client.connect();
+    const database = client.db("typhoiddata");   // <-- Your DB name
+    casesCollection = database.collection("cases"); // <-- Your collection name
+    console.log("✅ Connected to MongoDB Atlas");
+  } catch (err) {
+    console.error("❌ MongoDB connection error:", err);
+  }
+}
+
+// API endpoint to fetch all cases
+app.get("/cases", async (req, res) => {
+  try {
+    const data = await casesCollection.find({}).toArray();
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Error fetching data");
   }
 });
 
-// Route to download CSV
-app.get('/download-csv', async (req, res) => {
-  try {
-    const response = await axios.get(API_URL, {
-      params: {
-        'api-key': API_KEY,
-        format: 'json',
-      },
-      headers: {
-        accept: 'application/json',
-      },
-    });
-
-    const records = response.data.records;
-    if (!records || records.length === 0) {
-      return res.status(404).send('No records found to generate CSV');
-    }
-
-    const json2csvParser = new Parser();
-    const csv = json2csvParser.parse(records);
-
-    const filename = 'data.csv';
-    const filepath = path.join(__dirname, filename);
-
-    // Write CSV file
-    fs.writeFileSync(filepath, csv);
-
-    // Send CSV file as download
-    res.download(filepath, filename, (err) => {
-      if (err) {
-        console.error('Error sending file:', err);
-      }
-      // Delete file after sending
-      fs.unlinkSync(filepath);
-    });
-  } catch (error) {
-    console.error('Error generating CSV:', error.message);
-    res.status(500).send('Failed to generate CSV');
-  }
+// Root endpoint
+app.get("/", (req, res) => {
+  res.send("🚀 Typhoid API is running...");
 });
 
-// Start the server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
+// Start server
+app.listen(port, async () => {
+  await connectDB();
+  console.log(`🚀 Server running on http://localhost:${port}`);
 });
+
